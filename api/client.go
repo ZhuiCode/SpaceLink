@@ -6,7 +6,7 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-type client struct {
+type Client struct {
 	hostname string
 	config   *quic.Config
 	tlsConf  *tls.Config
@@ -15,7 +15,7 @@ type client struct {
 }
 
 /**/
-func (*client) SendDataStream(dataBuffer []byte) (int, error) {
+func (*Client) SendDataStream(dataBuffer []byte) (int, error) {
 	return len(dataBuffer), nil
 }
 
