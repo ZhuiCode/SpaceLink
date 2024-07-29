@@ -1,9 +1,7 @@
-package buffer
+package utils
 
 import (
 	"sync"
-
-	"github.com/quic-go/quic-go/internal/protocol"
 )
 
 var bufferPool sync.Pool
@@ -13,7 +11,7 @@ func GetPacketBuffer() []byte {
 }
 
 func PutPacketBuffer(buf []byte) {
-	if cap(buf) != int(protocol.MaxPacketBufferSize) {
+	if cap(buf) != int(MaxPacketBufferSize) {
 		panic("putPacketBuffer called with packet of wrong size!")
 	}
 	bufferPool.Put(buf[:0])
@@ -21,6 +19,6 @@ func PutPacketBuffer(buf []byte) {
 
 func Init() {
 	bufferPool.New = func() interface{} {
-		return make([]byte, 0, protocol.MaxPacketBufferSize)
+		return make([]byte, 0, MaxPacketBufferSize)
 	}
 }
