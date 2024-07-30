@@ -1,6 +1,7 @@
 package session
 
 import (
+	"fmt"
 	"net"
 	linkerr "spacelink/error"
 	"spacelink/internal/path"
@@ -10,15 +11,17 @@ import (
 )
 
 type Session struct {
+	// Number of session paths, excluding the initial one
+	nbPaths      uint8
 	nxtPathID    int64
 	perspective  utils.Perspective
-	paths        map[int64]path.Path
+	paths        map[quic.StreamID]path.Path
 	remoteAddrs4 []net.UDPAddr
 	remoteAddrs6 []net.UDPAddr
 	conn         quic.Connection
 }
 
-func newSession(conn quic.Connection) Session {
+func NewSession(conn quic.Connection) Session {
 	// Initial PathID is 0
 	// PathIDs of client-initiated paths are even
 	// those of server-initiated paths odd
@@ -47,7 +50,12 @@ func newSession(conn quic.Connection) Session {
 	sess.conn = conn
 	return sess
 }
-
+func getIPVersion(ip net.IP) int {
+	if ip.To4() != nil {
+		return 4
+	}
+	return 6
+}
 func (sess *Session) GetPerspective() utils.Perspective {
 	return sess.perspective
 }
@@ -61,7 +69,7 @@ func (sess *Session) AddPathToSess(pth path.Path) error {
 	}
 	return nil
 }
-func (sess *Session) DelPathFromSess(pathID int64) error {
+func (sess *Session) DelPathFromSess(pathID quic.StreamID) error {
 	path, ok := sess.paths[pathID]
 	if !ok {
 		return linkerr.ErrList[1]
@@ -78,4 +86,29 @@ func (sess *Session) Close() error {
 		delete(sess.paths, id)
 	}
 	return nil
+}
+
+func (sess *Session) CreatePath() error {
+	str, err := sess.conn.OpenStream()
+	if err != nil {
+		return err
+	}
+	pth := path.NewPath(str)
+	sess.paths[str.StreamID()] = pth
+	fmt.Println("Path id is ", str.StreamID())
+	return nil
+}
+
+func (sess *Session) WriteData(dataBuf []byte) (int, error) {
+	for _, pth := range sess.paths {
+		return pth.Write(dataBuf)
+	}
+	return 0, linkerr.ErrList[2]
+}
+
+func (sess *Session) ReadData(dataBuf []byte) (int, error) {
+	for _, pth := range sess.paths {
+		return pth.Read(dataBuf)
+	}
+	return 0, linkerr.ErrList[2]
 }
