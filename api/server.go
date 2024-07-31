@@ -32,7 +32,6 @@ type Server struct {
 	hostname string
 	config   *quic.Config
 	tlsConf  *tls.Config
-	sess     session.Session
 	sessions map[quic.ConnectionID]packetHandler
 }
 
