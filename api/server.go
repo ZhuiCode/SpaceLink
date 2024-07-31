@@ -20,11 +20,20 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
+type packetHandler interface {
+	quic.Connection
+	handlePacket(*session.ReceivedPacket)
+	GetVersion() quic.VersionNumber
+	run() error
+	closeRemote(error)
+}
+
 type Server struct {
 	hostname string
 	config   *quic.Config
 	tlsConf  *tls.Config
 	sess     session.Session
+	sessions map[quic.ConnectionID]packetHandler
 }
 
 func generateSelfSignedTLSConfig() (*tls.Config, error) {
@@ -71,8 +80,22 @@ func generateSelfSignedTLSConfig() (*tls.Config, error) {
 		Certificates: []tls.Certificate{cert},
 	}, nil
 }
+func NewServer(hostname string) {
+	serConfig := quic.Config{
+		MaxConnectionReceiveWindow: 1 << 30,
+		MaxStreamReceiveWindow:     1 << 30,
+	}
+	ser := Server{hostname: "localhost",
+		config: &serConfig,
+	}
+	tlsConf, err := generateSelfSignedTLSConfig()
+	if err != nil {
+		ser.tlsConf = tlsConf
+	}
+	session.NewSession()
+}
 
-func (s *Server) RunServListen(config *quic.Config, addr string) error {
+func (s *Server) RunServListen() error {
 	tlsConf, err := generateSelfSignedTLSConfig()
 	if err != nil {
 		log.Fatal(err)
@@ -80,8 +103,8 @@ func (s *Server) RunServListen(config *quic.Config, addr string) error {
 	tlsConf.NextProtos = []string{utils.ALPN}
 	//tlsConf.KeyLogWriter = keyLogFile
 
-	conf := config.Clone()
-	ln, err := quic.ListenAddr(addr, tlsConf, conf)
+	conf := s.config.Clone()
+	ln, err := quic.ListenAddr(s.hostname, tlsConf, conf)
 	if err != nil {
 		return err
 	}
@@ -92,9 +115,9 @@ func (s *Server) RunServListen(config *quic.Config, addr string) error {
 		if err != nil {
 			return fmt.Errorf("accept errored: %w", err)
 		}
-		go func(conn quic.Connection) {
-			s.HandleServConn(conn)
-		}(conn)
+		go func() {
+			s.HandleServConn()
+		}()
 	}
 }
 

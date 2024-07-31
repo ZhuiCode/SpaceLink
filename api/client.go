@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 
+	linkerr "spacelink/error"
 	"spacelink/internal/session"
 	"spacelink/utils"
 
@@ -15,11 +16,6 @@ type Client struct {
 	config   *quic.Config
 	tlsConf  *tls.Config
 	sess     session.Session
-}
-
-/**/
-func (*Client) SendDataStream(dataBuffer []byte) (int, error) {
-	return len(dataBuffer), nil
 }
 
 /**/
@@ -36,7 +32,7 @@ func NewClient(config *quic.Config, serAddr string) (Client, error) {
 	}
 	conn, err := quic.DialAddr(ctx, serAddr, clt.tlsConf, config)
 	if err != nil {
-		return clt, err
+		return clt, linkerr.ErrList[3]
 	}
 	clt.sess = session.NewSession(conn)
 	return clt, nil

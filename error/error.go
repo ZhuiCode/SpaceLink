@@ -11,6 +11,7 @@ var ErrList = []LinkErr{
 	{0, "Path has been found"},
 	{1, "Path has not been found"},
 	{2, "Data Write failed"},
+	{3, "quic DialAddr failed"},
 }
 
 func NewLinkErr(code int64, msg string) LinkErr {

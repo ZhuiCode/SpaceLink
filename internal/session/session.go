@@ -4,32 +4,48 @@ import (
 	"fmt"
 	"net"
 	linkerr "spacelink/error"
-	"spacelink/internal/path"
 	"spacelink/utils"
+	"time"
 
 	"github.com/quic-go/quic-go"
 )
 
+type ReceivedPacket struct {
+	remoteAddr net.Addr
+	data       []byte
+	rcvTime    time.Time
+	rcvPconn   net.PacketConn
+}
+
+type path struct {
+	pathID quic.StreamID //目前是基于streamID生成的，后续需要进一步考虑调整
+	stream quic.Stream
+}
+
 type Session struct {
 	// Number of session paths, excluding the initial one
-	nbPaths      uint8
-	nxtPathID    int64
-	perspective  utils.Perspective
-	paths        map[quic.StreamID]path.Path
+	nbpaths   uint8
+	nxtpathID int64
+
+	perspective             utils.Perspective
+	sessionCreationTime     time.Time
+	lastNetworkActivityTime time.Time
+
+	paths        map[quic.StreamID]path
 	remoteAddrs4 []net.UDPAddr
 	remoteAddrs6 []net.UDPAddr
 	conn         quic.Connection
 }
 
 func NewSession(conn quic.Connection) Session {
-	// Initial PathID is 0
-	// PathIDs of client-initiated paths are even
+	// Initial pathID is 0
+	// pathIDs of client-initiated paths are even
 	// those of server-initiated paths odd
 	var sess Session
 	if sess.perspective == utils.PerspectiveClient {
-		sess.nxtPathID = 1
+		sess.nxtpathID = 1
 	} else {
-		sess.nxtPathID = 2
+		sess.nxtpathID = 2
 	}
 
 	sess.remoteAddrs4 = make([]net.UDPAddr, 0)
@@ -50,31 +66,26 @@ func NewSession(conn quic.Connection) Session {
 	sess.conn = conn
 	return sess
 }
-func getIPVersion(ip net.IP) int {
-	if ip.To4() != nil {
-		return 4
-	}
-	return 6
-}
+
 func (sess *Session) GetPerspective() utils.Perspective {
 	return sess.perspective
 }
-func (sess *Session) AddPathToSess(pth path.Path) error {
-	_, ok := sess.paths[pth.PathID]
+func (sess *Session) AddpathToSess(pth path) error {
+	_, ok := sess.paths[pth.pathID]
 	if !ok {
-		sess.paths[pth.PathID] = pth
+		sess.paths[pth.pathID] = pth
 	} else {
-		utils.DefaultLogger.Errorf("Path ", pth.PathID, "has been found")
+		utils.DefaultLogger.Errorf("path ", pth.pathID, "has been found")
 		return linkerr.ErrList[0]
 	}
 	return nil
 }
-func (sess *Session) DelPathFromSess(pathID quic.StreamID) error {
+func (sess *Session) DelpathFromSess(pathID quic.StreamID) error {
 	path, ok := sess.paths[pathID]
 	if !ok {
 		return linkerr.ErrList[1]
 	} else {
-		path.Close()
+		path.stream.Close()
 		delete(sess.paths, pathID)
 	}
 	return nil
@@ -82,33 +93,33 @@ func (sess *Session) DelPathFromSess(pathID quic.StreamID) error {
 
 func (sess *Session) Close() error {
 	for id, path := range sess.paths {
-		path.Close()
+		path.stream.Close()
 		delete(sess.paths, id)
 	}
 	return nil
 }
 
-func (sess *Session) CreatePath() error {
+func (sess *Session) Createpath() error {
 	str, err := sess.conn.OpenStream()
 	if err != nil {
 		return err
 	}
-	pth := path.NewPath(str)
+	pth := path{stream: str}
 	sess.paths[str.StreamID()] = pth
-	fmt.Println("Path id is ", str.StreamID())
+	fmt.Println("path id is ", str.StreamID())
 	return nil
 }
 
 func (sess *Session) WriteData(dataBuf []byte) (int, error) {
 	for _, pth := range sess.paths {
-		return pth.Write(dataBuf)
+		return pth.stream.Write(dataBuf)
 	}
 	return 0, linkerr.ErrList[2]
 }
 
 func (sess *Session) ReadData(dataBuf []byte) (int, error) {
 	for _, pth := range sess.paths {
-		return pth.Read(dataBuf)
+		return pth.stream.Read(dataBuf)
 	}
 	return 0, linkerr.ErrList[2]
 }
