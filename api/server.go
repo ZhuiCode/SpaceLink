@@ -20,19 +20,19 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
+/*
 type packetHandler interface {
 	quic.Connection
 	handlePacket(*session.ReceivedPacket)
 	GetVersion() quic.VersionNumber
 	run() error
 	closeRemote(error)
-}
+}*/
 
 type Server struct {
 	hostname string
 	config   *quic.Config
 	tlsConf  *tls.Config
-	sessions map[quic.ConnectionID]packetHandler
 }
 
 func generateSelfSignedTLSConfig() (*tls.Config, error) {
@@ -114,31 +114,27 @@ func (s *Server) RunServListen() error {
 		if err != nil {
 			return fmt.Errorf("accept errored: %w", err)
 		}
-		go func() {
-			s.HandleServConn()
-		}()
+		go s.HandleServConn(conn)
 	}
 }
 
 func (s *Server) HandleServConn(conn quic.Connection) {
 	for {
-		str, err := conn.AcceptStream(context.Background())
+		stm, err := conn.AcceptStream(context.Background())
 		if err != nil {
 			return
 		}
-		log.Println("AcceptStream ", str.StreamID())
-		go func() {
-			s.handleServerStream()
-		}()
+		log.Println("AcceptStream ", stm.StreamID())
+		go s.handleServerStream(stm)
 	}
 }
 
-func (s *Server) handleServerStream() {
+func (s *Server) handleServerStream(stm quic.Stream) {
 
 	var dataBuffer []byte
 	// receive data until the client sends a FIN
 	for {
-		if _, err := s.sess.ReadData(dataBuffer); err != nil {
+		if _, err := stm.Read(dataBuffer); err != nil {
 			if err == io.EOF {
 				break
 			}

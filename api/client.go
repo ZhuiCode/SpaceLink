@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 
-	linkerr "spacelink/error"
 	"spacelink/internal/session"
 	"spacelink/utils"
 
@@ -16,6 +15,8 @@ type Client struct {
 	config   *quic.Config
 	tlsConf  *tls.Config
 	sess     session.Session
+	ctx      context.Context
+	cancel   context.CancelFunc
 }
 
 /**/
@@ -23,18 +24,13 @@ type Client struct {
 func NewClient(config *quic.Config, serAddr string) (Client, error) {
 	var clt Client
 	clt.hostname = serAddr
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
+	clt.ctx, clt.cancel = context.WithCancel(context.Background())
 	clt.tlsConf = &tls.Config{
 		InsecureSkipVerify: true,
 		NextProtos:         []string{utils.ALPN},
 	}
-	conn, err := quic.DialAddr(ctx, serAddr, clt.tlsConf, config)
-	if err != nil {
-		return clt, linkerr.ErrList[3]
-	}
-	clt.sess = session.NewSession(conn)
+
+	clt.sess = session.NewSession(clt.ctx, config, serAddr, clt.tlsConf)
 	return clt, nil
 }
 
